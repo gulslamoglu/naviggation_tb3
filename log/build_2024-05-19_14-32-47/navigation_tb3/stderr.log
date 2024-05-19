@@ -1,0 +1,6 @@
+[31mCMake Error at CMakeLists.txt:17 (add_executable):
+  No SOURCES given to target: publisher.py
+
+[0m
+[0mCMake Generate step failed.  Build files cannot be regenerated correctly.[0m
+gmake: *** [Makefile:295: cmake_check_build_system] Error 1
