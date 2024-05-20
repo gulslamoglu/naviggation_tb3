@@ -21,30 +21,35 @@ class PointSubscriber(Node):
         self.security_route = []
         self.navigator = BasicNavigator()
         self.navigator.waitUntilNav2Active()
+        self.is_navigating = False
+        self.initial_pose = None
 
     def listener_callback(self, msg):
         self.get_logger().info(f'Received Point: [{msg.x}, {msg.y}, {msg.z}]')
         self.security_route.append([msg.x, msg.y])
-        if len(self.security_route) >= 3:  # or any condition you prefer
+        if not self.is_navigating:
             self.start_security_route()
 
     def start_security_route(self):
-        initial_pose = PoseStamped()
-        initial_pose.header.frame_id = 'map'
-        initial_pose.header.stamp = self.navigator.get_clock().now().to_msg()
-        initial_pose.pose.position.x = 0.036
-        initial_pose.pose.position.y = 0.009
-        initial_pose.pose.orientation.z = -0.010
-        initial_pose.pose.orientation.w = 0.99
-        self.navigator.setInitialPose(initial_pose)
+        self.is_navigating = True
+        self.initial_pose = PoseStamped()
+        self.initial_pose.header.frame_id = 'map'
+        self.initial_pose.header.stamp = self.navigator.get_clock().now().to_msg()
+        self.initial_pose.pose.position.x = 0.036
+        self.initial_pose.pose.position.y = 0.009
+        self.initial_pose.pose.orientation.z = -0.010
+        self.initial_pose.pose.orientation.w = 0.99
+        self.navigator.setInitialPose(self.initial_pose)
+        self.update_route_and_navigate()
 
+    def update_route_and_navigate(self):
         route_poses = []
         pose = PoseStamped()
         pose.header.frame_id = 'map'
         pose.header.stamp = self.navigator.get_clock().now().to_msg()
         pose.pose.orientation.w = 1.0
 
-        graph = create_graph_with_initial_position(initial_pose, self.security_route)
+        graph = create_graph_with_initial_position(self.initial_pose, self.security_route)
         draw_graph(graph)
         path = plan_path_with_mst(graph)
         ordered_nodes = get_ordered_nodes_from_mst(path, "Start")
@@ -62,6 +67,7 @@ class PointSubscriber(Node):
     def navigate_through_poses(self, poses):
         if len(poses) == 0:
             print('Route complete!')
+            self.is_navigating = False
             return
 
         self.navigator.goToPose(poses[0])
