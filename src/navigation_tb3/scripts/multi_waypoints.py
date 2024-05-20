@@ -25,7 +25,7 @@ class PointSubscriber(Node):
     def listener_callback(self, msg):
         self.get_logger().info(f'Received Point: [{msg.x}, {msg.y}, {msg.z}]')
         self.security_route.append([msg.x, msg.y])
-        if len(self.security_route) == 3:  # or any condition you prefer
+        if len(self.security_route) >= 3:  # or any condition you prefer
             self.start_security_route()
 
     def start_security_route(self):
@@ -38,49 +38,57 @@ class PointSubscriber(Node):
         initial_pose.pose.orientation.w = 0.99
         self.navigator.setInitialPose(initial_pose)
 
-        while rclpy.ok():
-            route_poses = []
-            pose = PoseStamped()
-            pose.header.frame_id = 'map'
-            pose.header.stamp = self.navigator.get_clock().now().to_msg()
-            pose.pose.orientation.w = 1.0
+        route_poses = []
+        pose = PoseStamped()
+        pose.header.frame_id = 'map'
+        pose.header.stamp = self.navigator.get_clock().now().to_msg()
+        pose.pose.orientation.w = 1.0
 
-            graph = create_graph_with_initial_position(initial_pose, self.security_route)
-            draw_graph(graph)
-            path = plan_path_with_mst(graph)
+        graph = create_graph_with_initial_position(initial_pose, self.security_route)
+        draw_graph(graph)
+        path = plan_path_with_mst(graph)
+        ordered_nodes = get_ordered_nodes_from_mst(path, "Start")
 
-            for edge in path:
-                for node in edge:
-                    if node == "Start":
-                        continue
-                    trash_index = int(node.split()[1]) - 1
-                    pose.pose.position.x = self.security_route[trash_index][0]
-                    pose.pose.position.y = self.security_route[trash_index][1]
-                    route_poses.append(deepcopy(pose))
+        for node in ordered_nodes:
+            if node == "Start":
+                continue
+            trash_index = int(node.split()[1]) - 1
+            pose.pose.position.x = self.security_route[trash_index][0]
+            pose.pose.position.y = self.security_route[trash_index][1]
+            route_poses.append(deepcopy(pose))
 
-            self.navigator.goThroughPoses(route_poses)
+        self.navigate_through_poses(route_poses)
 
-            i = 0
-            while not self.navigator.isTaskComplete():
-                i += 1
-                feedback = self.navigator.getFeedback()
-                if feedback and i % 5 == 0:
-                    print('Estimated time to complete current route: ' + '{0:.0f}'.format(
-                          Duration.from_msg(feedback.estimated_time_remaining).nanoseconds / 1e9)
-                          + ' seconds.')
+    def navigate_through_poses(self, poses):
+        if len(poses) == 0:
+            print('Route complete!')
+            return
 
-                    if Duration.from_msg(feedback.navigation_time) > Duration(seconds=180.0):
-                        print('Navigation has exceeded timeout of 180s, canceling request.')
-                        self.navigator.cancelTask()
+        self.navigator.goToPose(poses[0])
 
-            result = self.navigator.getResult()
-            if result == TaskResult.SUCCEEDED:
-                print('Route complete! Restarting...')
-            elif result == TaskResult.CANCELED:
-                print('Security route was canceled, exiting.')
-                exit(1)
-            elif result == TaskResult.FAILED:
-                print('Security route failed! Restarting from other side...')
+        i = 0
+        while not self.navigator.isTaskComplete():
+            i += 1
+            feedback = self.navigator.getFeedback()
+            if feedback and i % 5 == 0:
+                print('Estimated time to complete current goal: ' + '{0:.0f}'.format(
+                      Duration.from_msg(feedback.estimated_time_remaining).nanoseconds / 1e9)
+                      + ' seconds.')
+
+                if Duration.from_msg(feedback.navigation_time) > Duration(seconds=180.0):
+                    print('Navigation has exceeded timeout of 180s, canceling request.')
+                    self.navigator.cancelTask()
+
+        result = self.navigator.getResult()
+        if result == TaskResult.SUCCEEDED:
+            print('Reached goal!')
+            self.navigate_through_poses(poses[1:])
+        elif result == TaskResult.CANCELED:
+            print('Navigation was canceled, exiting.')
+            exit(1)
+        elif result == TaskResult.FAILED:
+            print('Navigation failed, retrying next goal.')
+            self.navigate_through_poses(poses[1:])
 
 def create_graph_with_initial_position(initial_pose, trash_positions):
     G = nx.Graph()
@@ -116,8 +124,21 @@ def draw_graph(graph):
 
 def plan_path_with_mst(graph):
     mst = nx.minimum_spanning_tree(graph)
-    paths = list(mst.edges)
-    return paths
+    return mst
+
+def get_ordered_nodes_from_mst(mst, start_node):
+    visited = set()
+    ordered_nodes = []
+
+    def dfs(node):
+        visited.add(node)
+        ordered_nodes.append(node)
+        for neighbor in mst.neighbors(node):
+            if neighbor not in visited:
+                dfs(neighbor)
+
+    dfs(start_node)
+    return ordered_nodes
 
 def main(args=None):
     rclpy.init(args=args)
