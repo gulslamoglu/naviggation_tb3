@@ -1,5 +1,4 @@
-#! /usr/bin/env python3
-#! /usr/bin/env python3
+#!/usr/bin/env python3
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Point
@@ -24,8 +23,7 @@ class PointPublisher(Node):
         self.get_logger().info('Waiting for 10 seconds before starting to publish points...')
         time.sleep(10)
         self.get_logger().info('Starting to publish points.')
-        timer_period = 1.0  # seconds
-        self.timer = self.create_timer(timer_period, self.publish_points)
+        self.timer = self.create_timer(1.0, self.publish_points)
     
     def publish_points(self):
         if self.index < len(self.points):
@@ -39,9 +37,8 @@ class PointPublisher(Node):
             self.publish_random_points()
 
     def publish_random_points(self):
-        time.sleep(3)
-        self.get_logger().info('Publishing random points...')
-        for _ in range(3):  # Publish 3 random points
+        while rclpy.ok():
+            time.sleep(3)
             random_point = Point(
                 x=random.uniform(2, 4),
                 y=random.uniform(-2, 0),
@@ -49,7 +46,6 @@ class PointPublisher(Node):
             )
             self.publisher_.publish(random_point)
             self.get_logger().info(f'Publishing Random Point: [{random_point.x}, {random_point.y}, {random_point.z}]')
-            time.sleep(1)  # Small delay between publishing random points
 
 def main(args=None):
     rclpy.init(args=args)

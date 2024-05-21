@@ -1,4 +1,4 @@
-#! /usr/bin/env python3
+#!/usr/bin/env python3
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Point, PoseStamped
@@ -17,37 +17,45 @@ class PointSubscriber(Node):
             'points',
             self.listener_callback,
             10)
-        self.subscription
         self.security_route = []
         self.navigator = BasicNavigator()
         self.navigator.waitUntilNav2Active()
         self.is_navigating = False
-        self.initial_pose = None
+        self.current_goal = None
+        self.initial_pose = None  # Initialize initial_pose attribute here
 
     def listener_callback(self, msg):
         self.get_logger().info(f'Received Point: [{msg.x}, {msg.y}, {msg.z}]')
         self.security_route.append([msg.x, msg.y])
-        if not self.is_navigating:
-            self.start_security_route()
-
-    def start_security_route(self):
-        self.is_navigating = True
-        self.initial_pose = PoseStamped()
-        self.initial_pose.header.frame_id = 'map'
-        self.initial_pose.header.stamp = self.navigator.get_clock().now().to_msg()
-        self.initial_pose.pose.position.x = 0.036
-        self.initial_pose.pose.position.y = 0.009
-        self.initial_pose.pose.orientation.z = -0.010
-        self.initial_pose.pose.orientation.w = 0.99
-        self.navigator.setInitialPose(self.initial_pose)
         self.update_route_and_navigate()
 
     def update_route_and_navigate(self):
+        if self.is_navigating and self.current_goal:
+            distance_to_new_point = calculate_distance(self.navigator.getFeedback().current_pose.pose.position.x, 
+                                                       self.navigator.getFeedback().current_pose.pose.position.y,
+                                                       self.security_route[-1][0], self.security_route[-1][1])
+            distance_to_current_goal = calculate_distance(self.navigator.getFeedback().current_pose.pose.position.x, 
+                                                          self.navigator.getFeedback().current_pose.pose.position.y,
+                                                          self.current_goal.pose.position.x, self.current_goal.pose.position.y)
+            if distance_to_new_point < distance_to_current_goal:
+                self.navigator.cancelTask()
+
+        self.is_navigating = True
         route_poses = []
         pose = PoseStamped()
         pose.header.frame_id = 'map'
         pose.header.stamp = self.navigator.get_clock().now().to_msg()
         pose.pose.orientation.w = 1.0
+
+        if self.initial_pose is None:
+            self.initial_pose = PoseStamped()
+            self.initial_pose.header.frame_id = 'map'
+            self.initial_pose.header.stamp = self.navigator.get_clock().now().to_msg()
+            self.initial_pose.pose.position.x = 0.036
+            self.initial_pose.pose.position.y = 0.009
+            self.initial_pose.pose.orientation.z = -0.010
+            self.initial_pose.pose.orientation.w = 0.99
+            self.navigator.setInitialPose(self.initial_pose)
 
         graph = create_graph_with_initial_position(self.initial_pose, self.security_route)
         draw_graph(graph)
@@ -62,7 +70,9 @@ class PointSubscriber(Node):
             pose.pose.position.y = self.security_route[trash_index][1]
             route_poses.append(deepcopy(pose))
 
-        self.navigate_through_poses(route_poses)
+        if route_poses:
+            self.current_goal = route_poses[0]
+            self.navigate_through_poses(route_poses)
 
     def navigate_through_poses(self, poses):
         if len(poses) == 0:
@@ -88,12 +98,16 @@ class PointSubscriber(Node):
         result = self.navigator.getResult()
         if result == TaskResult.SUCCEEDED:
             print('Reached goal!')
+            # Remove the visited point from security_route
+            self.security_route.pop(0)
             self.navigate_through_poses(poses[1:])
         elif result == TaskResult.CANCELED:
             print('Navigation was canceled, exiting.')
             exit(1)
         elif result == TaskResult.FAILED:
             print('Navigation failed, retrying next goal.')
+            # Remove the visited point from security_route even if it failed
+            self.security_route.pop(0)
             self.navigate_through_poses(poses[1:])
 
 def create_graph_with_initial_position(initial_pose, trash_positions):
@@ -119,7 +133,7 @@ def create_graph_with_initial_position(initial_pose, trash_positions):
     return G
 
 def calculate_distance(x1, y1, x2, y2):
-    return ((x1 - x2)**2 + (y1 - y2)**2)**0.5
+    return ((x1 - x2)*2 + (y1 - y2)*2)*0.5
 
 def draw_graph(graph):
     pos = nx.get_node_attributes(graph, 'pos')
