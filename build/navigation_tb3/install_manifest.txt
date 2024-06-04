@@ -5,8 +5,10 @@
 /home/gulislamoglu/naviggation_tb3/install/navigation_tb3/share/navigation_tb3/config/tb3_map.yaml
 /home/gulislamoglu/naviggation_tb3/install/navigation_tb3/share/navigation_tb3/config/navigation.rviz
 /home/gulislamoglu/naviggation_tb3/install/navigation_tb3/share/navigation_tb3/config/turtlebot3_lds_2d.lua
+/home/gulislamoglu/naviggation_tb3/install/navigation_tb3/share/navigation_tb3/config/map_house.pgm
 /home/gulislamoglu/naviggation_tb3/install/navigation_tb3/share/navigation_tb3/config/tb3_nav2_params.yaml
 /home/gulislamoglu/naviggation_tb3/install/navigation_tb3/share/navigation_tb3/config/tb3_map.pgm
+/home/gulislamoglu/naviggation_tb3/install/navigation_tb3/share/navigation_tb3/config/map_house.yaml
 /home/gulislamoglu/naviggation_tb3/install/navigation_tb3/share/navigation_tb3/environment/pythonpath.sh
 /home/gulislamoglu/naviggation_tb3/install/navigation_tb3/share/navigation_tb3/environment/pythonpath.dsv
 /home/gulislamoglu/naviggation_tb3/install/navigation_tb3/local/lib/python3.10/dist-packages/navigation_tb3-0.0.0-py3.10.egg-info/top_level.txt
