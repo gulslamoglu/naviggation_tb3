@@ -95,10 +95,6 @@ if("x${CMAKE_INSTALL_COMPONENT}x" STREQUAL "xUnspecifiedx" OR NOT CMAKE_INSTALL_
 endif()
 
 if("x${CMAKE_INSTALL_COMPONENT}x" STREQUAL "xUnspecifiedx" OR NOT CMAKE_INSTALL_COMPONENT)
-  file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/lib/navigation_tb3" TYPE PROGRAM FILES "/home/gulislamoglu/naviggation_tb3/src/navigation_tb3/scripts/single_goal_nav.py")
-endif()
-
-if("x${CMAKE_INSTALL_COMPONENT}x" STREQUAL "xUnspecifiedx" OR NOT CMAKE_INSTALL_COMPONENT)
   file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/lib/navigation_tb3" TYPE PROGRAM FILES "/home/gulislamoglu/naviggation_tb3/src/navigation_tb3/scripts/multi_waypoints.py")
 endif()
 

@@ -31,11 +31,9 @@ install( DIRECTORY config/
 ament_python_install_package(${PROJECT_NAME})
 # Python Executables into Lib
 
-install(PROGRAMS scripts/single_goal_nav.py
-        DESTINATION lib/${PROJECT_NAME})
 
-        install(PROGRAMS scripts/multi_waypoints.py
-        DESTINATION lib/${PROJECT_NAME})
+install(PROGRAMS scripts/multi_waypoints.py
+DESTINATION lib/${PROJECT_NAME})
 
         install(PROGRAMS scripts/publisher.py
         DESTINATION lib/${PROJECT_NAME})

@@ -16,7 +16,6 @@
 /home/gulislamoglu/naviggation_tb3/install/navigation_tb3/local/lib/python3.10/dist-packages/navigation_tb3-0.0.0-py3.10.egg-info/dependency_links.txt
 /home/gulislamoglu/naviggation_tb3/install/navigation_tb3/local/lib/python3.10/dist-packages/navigation_tb3-0.0.0-py3.10.egg-info/PKG-INFO
 /home/gulislamoglu/naviggation_tb3/install/navigation_tb3/local/lib/python3.10/dist-packages/navigation_tb3/__init__.py
-/home/gulislamoglu/naviggation_tb3/install/navigation_tb3/lib/navigation_tb3/single_goal_nav.py
 /home/gulislamoglu/naviggation_tb3/install/navigation_tb3/lib/navigation_tb3/multi_waypoints.py
 /home/gulislamoglu/naviggation_tb3/install/navigation_tb3/lib/navigation_tb3/publisher.py
 /home/gulislamoglu/naviggation_tb3/install/navigation_tb3/share/ament_index/resource_index/package_run_dependencies/navigation_tb3

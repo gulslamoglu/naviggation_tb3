@@ -22,9 +22,11 @@ class PointSubscriber(Node):
         self.navigator.waitUntilNav2Active()
         self.is_navigating = False
         self.current_goal = None
-        self.initial_pose = None  # Initialize initial_pose attribute here
+        self.initial_pose = None  # initial_pose niteliği burada tanımlanıyor
+        self.all_points = []
+        self.visited_points = []  # Ziyaret edilen noktaları saklamak için
 
-        # Define obstacle locations and threshold distance
+        # Engel konumları ve eşik mesafesi
         self.obstacles = [
             (3.09, 0.472),
             (3.06, 1.54),
@@ -38,27 +40,33 @@ class PointSubscriber(Node):
         ]
         self.threshold_distance = 0.2
 
+    # Noktanın engellere çok yakın olup olmadığını kontrol eder
     def is_point_too_close_to_obstacle(self, point):
         for obstacle in self.obstacles:
             if self.calculate_distance(point[0], point[1], obstacle[0], obstacle[1]) < self.threshold_distance:
                 return True
         return False
 
+    # İki nokta arasındaki mesafeyi hesaplar
     def calculate_distance(self, x1, y1, x2, y2):
         return ((x1 - x2) ** 2 + (y1 - y2) ** 2) ** 0.5
 
+    # Abonelikten gelen mesajı işler
     def listener_callback(self, msg):
-        self.get_logger().info(f'Received Point: [{msg.x}, {msg.y}, {msg.z}]')
+        self.get_logger().info(f'Alınan Nokta: [{msg.x}, {msg.y}, {msg.z}]')
 
         if self.is_point_too_close_to_obstacle((msg.x, msg.y)):
-            self.get_logger().info(f'Point [{msg.x}, {msg.y}] is too close to an obstacle. Skipping this point.')
+            self.get_logger().info(f'Nokta [{msg.x}, {msg.y}] engele çok yakın. Bu nokta atlanıyor.')
             return
 
         self.security_route.append([msg.x, msg.y])
+        self.all_points.append([msg.x, msg.y])
+        
         if len(self.security_route) == 7:
-            self.update_route_and_navigate()
+            self.update_route_and_navigate_initial()
 
-    def update_route_and_navigate(self):
+    # İlk 7 nokta için rota güncellenir ve robot hedefe yönlendirilir
+    def update_route_and_navigate_initial(self):
         self.is_navigating = True
         route_poses = []
         pose = PoseStamped()
@@ -91,14 +99,19 @@ class PointSubscriber(Node):
 
         if route_poses:
             self.current_goal = route_poses[0]
-            self.navigate_through_poses(route_poses)
+            self.navigate_through_poses(route_poses, initial=True)
 
-    def navigate_through_poses(self, poses):
+    # Pozlar üzerinden navigasyon gerçekleştirilir
+    def navigate_through_poses(self, poses, initial=False):
         if len(poses) == 0:
-            print('Route complete!')
-            self.is_navigating = False
-            self.security_route = []
-            self.subscription.callback = self.listener_callback_for_random_points
+            if initial:
+                self.is_navigating = False
+                self.security_route = []
+                self.subscription.callback = self.listener_callback_for_random_points
+                self.get_logger().info('İlk rota tamamlandı. Rastgele noktalar bekleniyor.')
+            else:
+                self.draw_final_graph()
+                self.draw_visited_points_path()  # Ziyaret edilen noktaları çizdir
             return
 
         self.navigator.goToPose(poses[0])
@@ -108,29 +121,30 @@ class PointSubscriber(Node):
             i += 1
             feedback = self.navigator.getFeedback()
             if feedback and i % 5 == 0:
-                print('Estimated time to complete current goal: ' + '{0:.0f}'.format(
+                self.get_logger().info('Mevcut hedefin tamamlanma süresi tahmini: ' + '{0:.0f}'.format(
                       Duration.from_msg(feedback.estimated_time_remaining).nanoseconds / 1e9)
-                      + ' seconds.')
+                      + ' saniye.')
 
                 if Duration.from_msg(feedback.navigation_time) > Duration(seconds=180.0):
-                    print('Navigation has exceeded timeout of 180s, canceling request.')
+                    self.get_logger().info('Navigasyon 180 saniye sınırını aştı, istek iptal ediliyor.')
                     self.navigator.cancelTask()
 
         result = self.navigator.getResult()
         if result == TaskResult.SUCCEEDED:
-            print('Reached goal!')
-            # Remove the visited point from security_route
+            self.get_logger().info('Hedefe ulaşıldı!')
+            self.visited_points.append([poses[0].pose.position.x, poses[0].pose.position.y])  # Ziyaret edilen noktayı ekle
             self.security_route.pop(0)
-            self.navigate_through_poses(poses[1:])
+            self.navigate_through_poses(poses[1:], initial)
         elif result == TaskResult.CANCELED:
-            print('Navigation was canceled, exiting.')
+            self.get_logger().info('Navigasyon iptal edildi, çıkılıyor.')
             exit(1)
         elif result == TaskResult.FAILED:
-            print('Navigation failed, retrying next goal.')
-            # Remove the visited point from security_route even if it failed
+            self.get_logger().info('Navigasyon başarısız oldu, bir sonraki hedefe tekrar yönlendiriliyor.')
+            self.visited_points.append([poses[0].pose.position.x, poses[0].pose.position.y])  # Ziyaret edilen noktayı ekle
             self.security_route.pop(0)
-            self.navigate_through_poses(poses[1:])
+            self.navigate_through_poses(poses[1:], initial)
 
+    # Başlangıç noktası ve hedef noktalarla grafik oluşturulur
     def create_graph_with_initial_position(self, initial_pose, trash_positions):
         G = nx.Graph()
         
@@ -153,9 +167,7 @@ class PointSubscriber(Node):
 
         return G
 
-    def calculate_distance(self, x1, y1, x2, y2):
-        return ((x1 - x2) ** 2 + (y1 - y2) ** 2) ** 0.5
-
+    # Grafiği çizer
     def draw_graph(self, graph):
         pos = nx.get_node_attributes(graph, 'pos')
         nx.draw(graph, pos, with_labels=True, node_size=700, node_color='skyblue', font_size=10, font_weight='bold')
@@ -163,10 +175,12 @@ class PointSubscriber(Node):
         nx.draw_networkx_edge_labels(graph, pos, edge_labels=labels)
         plt.show()
 
+    # Minimum yayılma ağacı ile rota planlanır
     def plan_path_with_mst(self, graph):
         mst = nx.minimum_spanning_tree(graph)
         return mst
 
+    # Minimum yayılma ağacından düğümleri sırayla alır
     def get_ordered_nodes_from_mst(self, mst, start_node):
         visited = set()
         ordered_nodes = []
@@ -181,17 +195,21 @@ class PointSubscriber(Node):
         dfs(start_node)
         return ordered_nodes
 
+    # Rastgele noktalar için mesaj dinleyicisi
     def listener_callback_for_random_points(self, msg):
-        self.get_logger().info(f'Received Random Point: [{msg.x}, {msg.y}, {msg.z}]')
+        self.get_logger().info(f'Alınan Rastgele Nokta: [{msg.x}, {msg.y}, {msg.z}]')
 
         if self.is_point_too_close_to_obstacle((msg.x, msg.y)):
-            self.get_logger().info(f'Random Point [{msg.x}, {msg.y}] is too close to an obstacle. Skipping this point.')
+            self.get_logger().info(f'Nokta [{msg.x}, {msg.y}] engele çok yakın. Bu nokta atlanıyor.')
             return
 
         self.security_route.append([msg.x, msg.y])
-        if len(self.security_route) == 1:
+        self.all_points.append([msg.x, msg.y])
+
+        if len(self.security_route) >= 10:
             self.update_route_and_navigate_random()
 
+    # Rastgele noktalar için rota güncellenir ve robot hedefe yönlendirilir
     def update_route_and_navigate_random(self):
         self.is_navigating = True
         route_poses = []
@@ -201,12 +219,11 @@ class PointSubscriber(Node):
         pose.pose.orientation.w = 1.0
 
         if not self.security_route:
-            print('No more points to navigate.')
+            self.get_logger().info('Navigasyon için nokta kalmadı.')
             self.is_navigating = False
             return
 
         graph = self.create_graph_with_initial_position(self.initial_pose, self.security_route)
-        self.draw_graph(graph)
         path = self.plan_path_with_mst(graph)
         ordered_nodes = self.get_ordered_nodes_from_mst(path, "Start")
 
@@ -222,10 +239,13 @@ class PointSubscriber(Node):
             self.current_goal = route_poses[0]
             self.navigate_through_poses_random(route_poses)
 
+    # Rastgele pozlar üzerinden navigasyon gerçekleştirilir
     def navigate_through_poses_random(self, poses):
         if len(poses) == 0:
-            print('Random route complete!')
+            self.get_logger().info('Rastgele rota tamamlandı!')
             self.is_navigating = False
+            self.draw_final_graph()  # En son grafiği çizdir
+            self.draw_visited_points_path()  # Ziyaret edilen noktaları çizdir
             return
 
         self.navigator.goToPose(poses[0])
@@ -235,26 +255,71 @@ class PointSubscriber(Node):
             i += 1
             feedback = self.navigator.getFeedback()
             if feedback and i % 5 == 0:
-                print('Estimated time to complete current goal: ' + '{0:.0f}'.format(
+                self.get_logger().info('Mevcut hedefin tamamlanma süresi tahmini: ' + '{0:.0f}'.format(
                       Duration.from_msg(feedback.estimated_time_remaining).nanoseconds / 1e9)
-                      + ' seconds.')
+                      + ' saniye.')
 
                 if Duration.from_msg(feedback.navigation_time) > Duration(seconds=180.0):
-                    print('Navigation has exceeded timeout of 180s, canceling request.')
+                    self.get_logger().info('Navigasyon 180 saniye sınırını aştı, istek iptal ediliyor.')
                     self.navigator.cancelTask()
 
         result = self.navigator.getResult()
         if result == TaskResult.SUCCEEDED:
-            print('Reached random goal!')
+            self.get_logger().info('Rastgele hedefe ulaşıldı!')
+            self.visited_points.append([poses[0].pose.position.x, poses[0].pose.position.y])  # Ziyaret edilen noktayı ekle
             self.security_route.pop(0)
             self.navigate_through_poses_random(poses[1:])
         elif result == TaskResult.CANCELED:
-            print('Random navigation was canceled, exiting.')
+            self.get_logger().info('Rastgele navigasyon iptal edildi, çıkılıyor.')
             exit(1)
         elif result == TaskResult.FAILED:
-            print('Random navigation failed, retrying next goal.')
+            self.get_logger().info('Rastgele navigasyon başarısız oldu, bir sonraki hedefe tekrar yönlendiriliyor.')
+            self.visited_points.append([poses[0].pose.position.x, poses[0].pose.position.y])  # Ziyaret edilen noktayı ekle
             self.security_route.pop(0)
             self.navigate_through_poses_random(poses[1:])
+
+    # Son grafiği çizer
+    def draw_final_graph(self):
+        G = nx.Graph()
+        start_x = self.initial_pose.pose.position.x
+        start_y = self.initial_pose.pose.position.y
+        G.add_node("Start", pos=(start_x, start_y))
+
+        for i, pos in enumerate(self.all_points):
+            G.add_node(f"Point {i+1}", pos=(pos[0], pos[1]))
+
+        for i, pos in enumerate(self.all_points):
+            distance = self.calculate_distance(start_x, start_y, pos[0], pos[1])
+            G.add_edge("Start", f"Point {i+1}", weight=distance)
+
+        for i in range(len(self.all_points)):
+            for j in range(i+1, len(self.all_points)):
+                distance = self.calculate_distance(self.all_points[i][0], self.all_points[i][1], self.all_points[j][0], self.all_points[j][1])
+                if not G.has_edge(f"Point {i+1}", f"Point {j+1}"):
+                    G.add_edge(f"Point {i+1}", f"Point {j+1}", weight=distance)
+
+        self.draw_graph(G)
+
+    # Ziyaret edilen noktaları sırayla çizer
+    def draw_visited_points_path(self):
+        G = nx.DiGraph()  # Yönlü grafik
+        pos = {}
+        
+        start_x = self.initial_pose.pose.position.x
+        start_y = self.initial_pose.pose.position.y
+        pos["Start"] = (start_x, start_y)
+        G.add_node("Start")
+
+        for i, point in enumerate(self.visited_points):
+            pos[f"Point {i+1}"] = (point[0], point[1])
+            G.add_node(f"Point {i+1}")
+            if i == 0:
+                G.add_edge("Start", f"Point {i+1}")
+            else:
+                G.add_edge(f"Point {i}", f"Point {i+1}")
+
+        nx.draw(G, pos, with_labels=True, node_size=700, node_color='skyblue', font_size=10, font_weight='bold')
+        plt.show()
 
 def main(args=None):
     rclpy.init(args=args)
